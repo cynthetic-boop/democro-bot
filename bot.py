@@ -9,7 +9,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 load_dotenv()
-token = os.getenv('TOKEN')
+token = os.getenv('DEV')
 joke_pattern = os.getenv('JOKE')
 bot = commands.Bot(command_prefix='$')
 logging.basicConfig(level=logging.WARN)
@@ -133,6 +133,26 @@ class Cogs(commands.Cog):
                 raise ChannelNotFoundError
         await state.store(ctx.guild.id)
         await ctx.send(f"Thread channel updated to <#{bot.get_channel(discuss_channel)}>.  Vote channel updated to <#{bot.get_channel(vote_channel)}>")
+
+    @commands.command()
+    @commands.is_owner()
+    async def status(self, ctx, type, *, status):
+        if "play" in type:
+            type = discord.ActivityType.playing
+        elif "streaming" in type:
+            type = discord.ActivityType.streaming
+        elif "listening" in type:
+            type = discord.ActivityType.listening
+        elif "watching" in type:
+            type = discord.ActivityType.watching
+        elif "competing" in type:
+            type = discord.ActivityType.competing
+        elif "custom" in type:
+            type = discord.ActivityType.custom
+        else:
+            return
+        activity = discord.Activity(name=str(status), type=type)
+        await bot.change_presence(activity=activity)
 
     @commands.command()
     @commands.is_owner()
