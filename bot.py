@@ -16,11 +16,14 @@ try:
     os.mkdir('./db/')
 except FileExistsError:
     pass
-d = shelve.open(fr'./db/id_shelf')
+d = shelve.open('./db/id_shelf')
 d.close()
 
 
 class ChannelNotFoundError(Exception):
+    pass
+
+class DBKeyNotFoundError(Exception):
     pass
 
 
@@ -58,8 +61,10 @@ class Cogs(commands.Cog):
     async def startvote(self, ctx, *, vote_name):
         state = self.get_state(ctx.guild)
         if state.discuss_ch is None or state.vote_ch is None:
-            state.discuss_ch = await self._shelf_read(f'{ctx.guild.id}-d')
-            state.vote_ch = await self._shelf_read(f'{ctx.guild.id}-v')
+            try:
+                await state.update_cache(ctx.guild.id)
+            except DBKeyNotFoundError:
+                return await ctx.send("You first need to establish which channels votes are held in with the 'setchannels' command")
         linked_thread = await state.discuss_ch.create_thread(name=f"{vote_name}", type=discord.ChannelType.public_thread, reason=f"Discussion thread for topic: {vote_name}")
         await linked_thread.join()
         await linked_thread.add_user(ctx.message.author)
@@ -79,29 +84,68 @@ class Cogs(commands.Cog):
 
     @commands.command()
     @commands.guild_only()
+    async def startsimplevote(self, ctx, *, vote_name):
+        state = self.get_state(ctx.guild)
+        if state.vote_ch is None:
+            try:
+                await state.update_cache(ctx.guild.id)
+            except DBKeyNotFoundError:
+                return await ctx.send("You first need to establish which channels votes are held in with the 'setchannels' command.")
+        embed = discord.Embed(title=f"Vote on \"{vote_name}\"", description=f"✅ for yes\n❌ for no\n⬛ for no opinion\n❔ to ask vote author to discuss more")
+        embed.set_author(name=f"Vote started by: {ctx.message.author.name}")
+        embed.set_footer(text="Remember not to send messages in this channel.")
+        vote_message = await state.vote_ch.send(embed=embed)
+        await vote_message.add_reaction(emoji='✅')
+        await vote_message.add_reaction(emoji='❌')
+        await vote_message.add_reaction(emoji='⬛')
+        await vote_message.add_reaction(emoji='❔')
+        await linked_thread.send(embed=thread_embed)
+        await ctx.message.delete(delay=1.0)
+
+    @commands.command()
+    @commands.guild_only()
     @commands.has_role("vote-operator")
     async def setchannels(self, ctx, discuss_channel, vote_channel):
-        standard = re.compile('<#.{16,20}>')
-        joke = re.compile('<#(69|420|1337)>')
+        state = self.get_state(ctx.guild)
+        standard = re.compile('<#[0-9]{16,20}>')
+        joke = re.compile('<#(69|420|1337|1984)>')
         if joke.match(str(discuss_channel) + str(vote_channel)):
             return await ctx.send("Haha, very funny.  Those are some cute channel IDs you have there.")
         if standard.match(discuss_channel):
             discuss_channel = int(re.sub('[<#>]', '', discuss_channel))
             if standard.match(vote_channel):
                 vote_channel = int(re.sub('[<#>]', '', vote_channel))
-                discord.utils.get(ctx.guild.channels, id=discuss_channel)
-                discord.utils.get(ctx.guild.channels, id=vote_channel)
+                try:
+                    state.discuss_ch = discuss_channel
+                    state.vote_ch = vote_channel
+                except:
+                    raise ChannelNotFoundError
             else:
-                await ctx.send(f"Please both channels in the same format.")
+                await ctx.send(f"Please provide both channels in the same format.")
         else:
             discuss_channel = int(discuss_channel)
             vote_channel = int(vote_channel)
-            if bot.get_channel(discuss_channel) is None:
-                if bot.get_channel(vote_channel) is None:
-                    raise ChannelNotFoundError
-        await self._shelve(f'{ctx.guild.id}-d', discuss_channel)
-        await self._shelve(f'{ctx.guild.id}-v', vote_channel)
+            try:
+                state.discuss_ch = discuss_channel
+                state.vote_ch = vote_channel
+            except:
+                raise ChannelNotFoundError
+        await state.store(ctx.guild.id)
         await ctx.send(f"Thread channel updated to <#{bot.get_channel(discuss_channel)}>.  Vote channel updated to <#{bot.get_channel(vote_channel)}>")
+
+    @commands.command()
+    @commands.is_owner()
+    async def statedebug(self, ctx):
+        state = self.get_state(ctx.guild)
+        print("Sending owner debug info...")
+        owner = await bot.fetch_user(bot.owner_id)
+        await owner.create_dm()
+        await owner.dm_channel.send(f"""Debug info for **{ctx.guild.name} [{ctx.guild.id}]**
+```Cached Info:
+{state}\n
+Stored DB info:
+Discussion Channel:{await self._shelf_read(f"{ctx.guild.id}-d")}
+Vote Channel:{await self._shelf_read(f"{ctx.guild.id}-v")}```""")
 
     @setchannels.error
     async def on_command_error(self, ctx, error):
@@ -124,6 +168,10 @@ class GuildState:
     def __init__(self):
         self._discuss_ch = None
         self._vote_ch = None
+        self._current_votes = {} #stores current votes
+
+    def __repr__(self):
+        return f"Discussion channel: {self.discuss_ch}\nVote Channel: {self.vote_ch}"
 
     @property
     def discuss_ch(self):
@@ -141,6 +189,19 @@ class GuildState:
     def vote_ch(self, channel_id: int):
         self._vote_ch = bot.get_channel(channel_id)
 
+    async def store(self, id):
+        with shelve.open('./db/id_shelf') as shelf:
+            shelf[f"{id}-d"] = self.discuss_ch.id
+            shelf[f"{id}-v"] = self.vote_ch.id
+
+    async def update_cache(self, id):
+        with shelve.open('./db/id_shelf') as shelf:
+            try:
+                self.discuss_ch = shelf[f"{id}-d"]
+                self.vote_ch = shelf[f"{id}-v"]
+            except KeyError:
+                raise DBKeyNotFoundError
+
 
 class VoteItem:
     """A vote/poll that currently exists in a server, with all vote information stored."""
@@ -149,6 +210,8 @@ class VoteItem:
         self.no_votes = 0
         self.abstain_votes = 0
         self.question_votes = 0
+        self.embed = None
+        self.message = None
 
     @property
     def yes_votes(self):
@@ -181,6 +244,14 @@ class VoteItem:
     @question_votes.setter
     def question_votes(self, votes: int):
         self.question_votes = votes
+
+    @property
+    def embed(self):
+        return self.question_votes
+
+    @embed.setter
+    def embed(self, embed: int):
+        self.embed = embed
 
 
 @bot.event
