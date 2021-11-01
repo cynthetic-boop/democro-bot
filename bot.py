@@ -133,19 +133,6 @@ class Cogs(commands.Cog):
         await state.store(ctx.guild.id)
         await ctx.send(f"Thread channel updated to <#{bot.get_channel(discuss_channel)}>.  Vote channel updated to <#{bot.get_channel(vote_channel)}>")
 
-    @commands.command()
-    @commands.is_owner()
-    async def statedebug(self, ctx):
-        state = self.get_state(ctx.guild)
-        print("Sending owner debug info...")
-        owner = await bot.fetch_user(bot.owner_id)
-        await owner.create_dm()
-        await owner.dm_channel.send(f"""Debug info for **{ctx.guild.name} [{ctx.guild.id}]**
-```Cached Info:
-{state}\n
-Stored DB info:
-Discussion Channel:{await self._shelf_read(f"{ctx.guild.id}-d")}
-Vote Channel:{await self._shelf_read(f"{ctx.guild.id}-v")}```""")
 
     @setchannels.error
     async def on_command_error(self, ctx, error):
@@ -168,7 +155,6 @@ class GuildState:
     def __init__(self):
         self._discuss_ch = None
         self._vote_ch = None
-        self._current_votes = {} #stores current votes
 
     def __repr__(self):
         return f"Discussion channel: {self.discuss_ch}\nVote Channel: {self.vote_ch}"
@@ -203,63 +189,11 @@ class GuildState:
                 raise DBKeyNotFoundError
 
 
-class VoteItem:
-    """A vote/poll that currently exists in a server, with all vote information stored."""
-    def __init__(self):
-        self.yes_votes = 0
-        self.no_votes = 0
-        self.abstain_votes = 0
-        self.question_votes = 0
-        self.embed = None
-        self.message = None
-
-    @property
-    def yes_votes(self):
-        return self.yes_votes
-
-    @yes_votes.setter
-    def yes_votes(self, votes: int):
-        self.yes_votes = votes
-
-    @property
-    def no_votes(self):
-        return self.no_votes
-
-    @no_votes.setter
-    def discuss_ch(self, votes: int):
-        self.no_votes = votes
-
-    @property
-    def abstain_votes(self):
-        return self.discuss_ch
-
-    @abstain_votes.setter
-    def abstain_votes(self, votes: int):
-        self.abstain_votes = votes
-
-    @property
-    def question_votes(self):
-        return self.question_votes
-
-    @question_votes.setter
-    def question_votes(self, votes: int):
-        self.question_votes = votes
-
-    @property
-    def embed(self):
-        return self.question_votes
-
-    @embed.setter
-    def embed(self, embed: int):
-        self.embed = embed
-
-
 @bot.event
 async def on_ready():
     print(f"CONNECTED!\nBot client: [{bot.user}]\n~~~~~~~~")
     activity = discord.Activity(name='the voting booth.', type=discord.ActivityType.watching)
     await bot.change_presence(activity=activity)
-
 
 
 bot.add_cog(Cogs(bot))
