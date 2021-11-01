@@ -122,24 +122,24 @@ class Cogs(commands.Cog):
 class GuildState:
     """Class that manages the state in each guild the bot is connected to."""
     def __init__(self):
-        self.discuss_ch = None
-        self.vote_ch = None
+        self._discuss_ch = None
+        self._vote_ch = None
 
     @property
     def discuss_ch(self):
-        return self.discuss_ch
+        return self._discuss_ch
 
     @discuss_ch.setter
     def discuss_ch(self, channel_id: int):
-        self.discuss_ch = bot.get_channel(channel_id)
+        self._discuss_ch = bot.get_channel(channel_id)
 
     @property
     def vote_ch(self):
-        return self.vote_ch
+        return self._vote_ch
 
     @vote_ch.setter
     def vote_ch(self, channel_id: int):
-        self.vote_ch = bot.get_channel(channel_id)
+        self._vote_ch = bot.get_channel(channel_id)
 
 
 class VoteItem:
