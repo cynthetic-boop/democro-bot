@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 token = os.getenv('DEV')
 joke_pattern = os.getenv('JOKE')
-bot = commands.Bot(command_prefix='$')
+bot = commands.Bot(command_prefix='!')
 logging.basicConfig(level=logging.WARN)
 try:
     os.mkdir('./db/')
