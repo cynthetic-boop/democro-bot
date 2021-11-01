@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 token = os.getenv('TOKEN')
+joke_pattern = os.getenv('JOKE')
 bot = commands.Bot(command_prefix='$')
 logging.basicConfig(level=logging.WARN)
 try:
@@ -108,7 +109,7 @@ class Cogs(commands.Cog):
     async def setchannels(self, ctx, discuss_channel, vote_channel):
         state = self.get_state(ctx.guild)
         standard = re.compile('<#[0-9]{16,20}>')
-        joke = re.compile('<#(69|420|1337|1984)>')
+        joke = re.compile(joke_pattern)
         if joke.match(str(discuss_channel) + str(vote_channel)):
             return await ctx.send("Haha, very funny.  Those are some cute channel IDs you have there.")
         if standard.match(discuss_channel):
