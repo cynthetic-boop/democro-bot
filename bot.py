@@ -168,6 +168,13 @@ Stored DB info:
 Discussion Channel:{await self._shelf_read(f"{ctx.guild.id}-d")}
 Vote Channel:{await self._shelf_read(f"{ctx.guild.id}-v")}```""")
 
+    @commands.command()
+    @commands.is_owner()
+    async def shudown(self, ctx, confirm):
+        await ctx.message.delete()
+        if confirm == str(os.getenv('CODE')):
+            exit()
+
     @setchannels.error
     async def on_command_error(self, ctx, error):
         print(f"Type {type(error)} with message {error}")
