@@ -40,9 +40,13 @@ class Cogs(commands.Cog):
             self.states[guild.id] = GuildState()
             return self.states[guild.id]
 
-    def _shelve(self, key, id):
+    async def _shelve(self, key, id):
         with shelve.open('./db/id_shelf') as shelf:
             shelf[key] = id
+
+    async def _shelf_read(self, key):
+        with shelve.open('./db/id_shelf') as shelf:
+            return shelf[key]
 
     @commands.command()
     @commands.guild_only()
@@ -54,9 +58,8 @@ class Cogs(commands.Cog):
     async def startvote(self, ctx, *, vote_name):
         state = self.get_state(ctx.guild)
         if state.discuss_ch is None or state.vote_ch is None:
-            with shelve.open('id_shelf') as d:
-                state.discuss_ch = d[f'{ctx.guild.id}-d']
-                state.vote_ch = d[f'{ctx.guild.id}-v']
+            state.discuss_ch = await self._shelf_read(f'{ctx.guild.id}-d')
+            state.vote_ch = await self._shelf_read(f'{ctx.guild.id}-v')
         linked_thread = await state.discuss_ch.create_thread(name=f"{vote_name}", type=discord.ChannelType.public_thread, reason=f"Discussion thread for topic: {vote_name}")
         await linked_thread.join()
         await linked_thread.add_user(ctx.message.author)
@@ -64,6 +67,7 @@ class Cogs(commands.Cog):
         embed = discord.Embed(title=f"Vote on \"{vote_name}\"", description=f"✅ for yes\n❌ for no\n⬛ for no opinion\n❔ to ask vote author to discuss more")
         embed.set_author(name=f"Vote started by: {ctx.message.author.name}")
         embed.add_field(name="Link to thread", value=f"[Click Here]({linked_message.jump_url})")
+        embed.set_footer(text="Remember not to send messages in this channel.")
         vote_message = await state.vote_ch.send(embed=embed)
         await vote_message.add_reaction(emoji='✅')
         await vote_message.add_reaction(emoji='❌')
@@ -95,8 +99,8 @@ class Cogs(commands.Cog):
             if bot.get_channel(discuss_channel) is None:
                 if bot.get_channel(vote_channel) is None:
                     raise ChannelNotFoundError
-        self._shelve(f'{ctx.guild.id}-v', discuss_channel)
-        self._shelve(f'{ctx.guild.id}-d', vote_channel)
+        await self._shelve(f'{ctx.guild.id}-v', discuss_channel)
+        await self._shelve(f'{ctx.guild.id}-d', vote_channel)
         await ctx.send(f"Thread channel updated to <#{bot.get_channel(discuss_channel)}>.  Vote channel updated to <#{bot.get_channel(vote_channel)}>")
 
     @setchannels.error
