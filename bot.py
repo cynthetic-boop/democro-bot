@@ -99,8 +99,8 @@ class Cogs(commands.Cog):
             if bot.get_channel(discuss_channel) is None:
                 if bot.get_channel(vote_channel) is None:
                     raise ChannelNotFoundError
-        await self._shelve(f'{ctx.guild.id}-v', discuss_channel)
-        await self._shelve(f'{ctx.guild.id}-d', vote_channel)
+        await self._shelve(f'{ctx.guild.id}-d', discuss_channel)
+        await self._shelve(f'{ctx.guild.id}-v', vote_channel)
         await ctx.send(f"Thread channel updated to <#{bot.get_channel(discuss_channel)}>.  Vote channel updated to <#{bot.get_channel(vote_channel)}>")
 
     @setchannels.error
