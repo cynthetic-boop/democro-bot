@@ -13,10 +13,10 @@ token = os.getenv('TOKEN')
 bot = commands.Bot(command_prefix='$')
 logging.basicConfig(level=logging.WARN)
 try:
-    os.mkdir('.\db\\')
+    os.mkdir('./db/')
 except FileExistsError:
     pass
-d = shelve.open(fr'.\db\id_shelf')
+d = shelve.open(fr'./db/id_shelf')
 d.close()
 
 
