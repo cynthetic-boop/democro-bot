@@ -7,11 +7,14 @@ import shelve
 
 from discord.ext import commands
 from dotenv import load_dotenv
+from dataclasses import dataclass
+from typing import Optional, Dict
 
 load_dotenv()
 token = os.getenv('DEV')
 joke_pattern = os.getenv('JOKE')
-bot = commands.Bot(command_prefix='!')
+owner = os.getenv('OWNER')
+bot = commands.Bot(command_prefix='d!', owner_id=owner)
 logging.basicConfig(level=logging.WARN)
 try:
     os.mkdir('./db/')
@@ -131,11 +134,20 @@ class Cogs(commands.Cog):
                 state.vote_ch = vote_channel
             except:
                 raise ChannelNotFoundError
-        await state.store(ctx.guild.id)
+        await state.store(ctx.guild)
         await ctx.send(f"Thread channel updated to <#{bot.get_channel(discuss_channel)}>.  Vote channel updated to <#{bot.get_channel(vote_channel)}>")
+
+
+    @commands.command()
+    async def open_dm(self, ctx):
+        await ctx.message.author.create_dm()
+        await ctx.message.author.dm_channel.send("Opened dm")
+        print(f"Opened DM with user {ctx.message.author}")
+        await self.send_owner(f"Opened DM with user {ctx.message.author}")
 
     @commands.command()
     @commands.is_owner()
+    @commands.dm_only()
     async def status(self, ctx, type, *, status):
         if "play" in type:
             type = discord.ActivityType.playing
@@ -156,12 +168,25 @@ class Cogs(commands.Cog):
 
     @commands.command()
     @commands.is_owner()
-    async def statedebug(self, ctx):
-        state = self.get_state(ctx.guild)
+    @commands.dm_only()
+    async def listIDs(self, ctx, number: int):
+        msg = []
+        PAGE_SIZE = 10
+        start = number * PAGE_SIZE
+        end = start + PAGE_SIZE
+        for key in list(self.states)[start:end]:
+            msg.append(f"{key}")
+        await self.send_owner("\n".join(msg))
+
+
+    @commands.command()
+    @commands.is_owner()
+    @commands.dm_only()
+    async def statedebug(self, ctx, id):
+        guild = bot.get_guild(id)
+        state = self.get_state(guild)
         print("Sending owner debug info...")
-        owner = await bot.fetch_user(bot.owner_id)
-        await owner.create_dm()
-        await owner.dm_channel.send(f"""Debug info for **{ctx.guild.name} [{ctx.guild.id}]**
+        await self.send_owner(f"""Debug info for **{guild.name} [{guild.id}]**
 ```Cached Info:
 {state}\n
 Stored DB info:
@@ -170,10 +195,17 @@ Vote Channel:{await self._shelf_read(f"{ctx.guild.id}-v")}```""")
 
     @commands.command()
     @commands.is_owner()
+    @commands.dm_only()
     async def shudown(self, ctx, confirm):
         await ctx.message.delete()
         if confirm == str(os.getenv('CODE')):
             exit()
+
+
+    async def send_owner(self, message: str):
+        owner = await bot.fetch_user(bot.owner_id)
+        await owner.create_dm()
+        await owner.dm_channel.send(message)
 
     @setchannels.error
     async def on_command_error(self, ctx, error):
@@ -191,36 +223,22 @@ Vote Channel:{await self._shelf_read(f"{ctx.guild.id}-v")}```""")
         return await ctx.send("You must provide two channels using #'s or channel IDs as numbers in the order:\n1st: thread channel (the channel where discussion threads get sent),\n2nd: voting channel (the channel where only votes take place).")
 
 
+@dataclass
 class GuildState:
     """Class that manages the state in each guild the bot is connected to."""
-    def __init__(self):
-        self._discuss_ch = None
-        self._vote_ch = None
-        self._current_votes = {} #stores current votes
+    id: int
+    discuss_ch: Optional[str]
+    vote_ch: Optional[str]
+    current_votes: Dict[str, int]
 
     def __repr__(self):
         return f"Discussion channel: {self.discuss_ch}\nVote Channel: {self.vote_ch}"
 
-    @property
-    def discuss_ch(self):
-        return self._discuss_ch
-
-    @discuss_ch.setter
-    def discuss_ch(self, channel_id: int):
-        self._discuss_ch = bot.get_channel(channel_id)
-
-    @property
-    def vote_ch(self):
-        return self._vote_ch
-
-    @vote_ch.setter
-    def vote_ch(self, channel_id: int):
-        self._vote_ch = bot.get_channel(channel_id)
-
-    async def store(self, id):
+    async def store(self, guild):
         with shelve.open('./db/id_shelf') as shelf:
-            shelf[f"{id}-d"] = self.discuss_ch.id
-            shelf[f"{id}-v"] = self.vote_ch.id
+            shelf[f"{guild.id}-d"] = self.discuss_ch.id
+            shelf[f"{guild.id}-v"] = self.vote_ch.id
+        print(f"Stored persistent data for server{guild.name}[ID: {guild.id}]")
 
     async def update_cache(self, id):
         with shelve.open('./db/id_shelf') as shelf:
@@ -230,56 +248,15 @@ class GuildState:
             except KeyError:
                 raise DBKeyNotFoundError
 
-
+@dataclass
 class VoteItem:
     """A vote/poll that currently exists in a server, with all vote information stored."""
-    def __init__(self):
-        self.yes_votes = 0
-        self.no_votes = 0
-        self.abstain_votes = 0
-        self.question_votes = 0
-        self.embed = None
-        self.message = None
-
-    @property
-    def yes_votes(self):
-        return self.yes_votes
-
-    @yes_votes.setter
-    def yes_votes(self, votes: int):
-        self.yes_votes = votes
-
-    @property
-    def no_votes(self):
-        return self.no_votes
-
-    @no_votes.setter
-    def discuss_ch(self, votes: int):
-        self.no_votes = votes
-
-    @property
-    def abstain_votes(self):
-        return self.discuss_ch
-
-    @abstain_votes.setter
-    def abstain_votes(self, votes: int):
-        self.abstain_votes = votes
-
-    @property
-    def question_votes(self):
-        return self.question_votes
-
-    @question_votes.setter
-    def question_votes(self, votes: int):
-        self.question_votes = votes
-
-    @property
-    def embed(self):
-        return self.question_votes
-
-    @embed.setter
-    def embed(self, embed: int):
-        self.embed = embed
+    yes_votes: int
+    no_votes: int
+    abstain_votes: int
+    question_votes: int
+    embed: discord.Embed
+    message: discord.Message
 
 
 @bot.event
@@ -287,7 +264,6 @@ async def on_ready():
     print(f"CONNECTED!\nBot client: [{bot.user}]\n~~~~~~~~")
     activity = discord.Activity(name='the voting booth.', type=discord.ActivityType.watching)
     await bot.change_presence(activity=activity)
-
 
 
 bot.add_cog(Cogs(bot))
